@@ -33,5 +33,8 @@ class BasicAuth(HttpBasicAuth):
         return user
 
 
-def authentication_error_handler(request: HttpRequest, exc: AuthenticationError):
+def authentication_error_handler(
+    request: HttpRequest,
+    exc: AuthenticationError,
+):
     return JsonResponse({"detail": str(exc)}, status=401)

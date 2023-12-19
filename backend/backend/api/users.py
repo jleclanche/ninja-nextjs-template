@@ -11,11 +11,10 @@ from .schemas import TokenSchema, UserSchema
 from .security import BasicAuth, TokenAuth
 from .utils import Request
 
-collection_router = Router()
-profile_router = Router()
+users_router = Router()
 
 
-@collection_router.get("/v1/users", response=list[UserSchema], tags=["users"])
+@users_router.get("/v1/users", response=list[UserSchema], tags=["users"])
 @paginate
 def list_users(request: Request):
     if not request.auth.is_staff:
@@ -30,21 +29,25 @@ class UserCreateRequest(Schema):
     password: str
 
 
-@collection_router.post(
+ErrorResponse = dict[Literal["detail"], str]
+
+
+@users_router.post(
     "/v1/users",
-    response={200: TokenSchema, 409: dict},
+    response={200: TokenSchema, 409: ErrorResponse},
     auth=None,
     tags=["users"],
 )
 def create_user(request: Request, payload: UserCreateRequest):
+    email = payload.email.lower()
     with transaction.atomic():
-        if User.objects.filter(email=payload.email).exists():
+        if User.objects.filter(email=email).exists():
             return 409, {"detail": "A user with this email already exists."}
 
         create_user = User.objects.create_user  # type: ignore
         user: User = create_user(
-            username=payload.email,
-            email=payload.email,
+            username=email,
+            email=email,
             full_name=payload.full_name,
         )
         user.set_password(payload.password)
@@ -58,7 +61,7 @@ def create_user(request: Request, payload: UserCreateRequest):
     return TokenSchema(token=token.secret, user=user)
 
 
-@profile_router.get("/v1/user", response=UserSchema, tags=["users"])
+@users_router.get("/v1/user", response=UserSchema, tags=["users"])
 def get_logged_user(request: Request):
     return request.auth
 
@@ -72,8 +75,11 @@ class UpdateUserRequest(Schema):
 
 # NOTE: Order of the auth classes matters. If BasicAuth is first, exceptions
 # will be logged (invalid Authorization header).
-@profile_router.patch(
-    "/v1/user", response=UserSchema, auth=(TokenAuth(), BasicAuth()), tags=["users"]
+@users_router.patch(
+    "/v1/user",
+    response=UserSchema,
+    auth=(TokenAuth(), BasicAuth()),
+    tags=["users"],
 )
 def update_logged_user(request: Request, payload: UpdateUserRequest):
     if payload.password:
